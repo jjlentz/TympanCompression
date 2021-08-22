@@ -1,3 +1,4 @@
 # TympanCompression
-from the [Auditory Perception Laboratory](https://sphs.indiana.edu/research/department-labs/auditory-perception-laboratory/index.html)
+from the <a href="https://sphs.indiana.edu/research/department-labs/auditory-perception-laboratory/index.html" target="_blank">
+Auditory Perception Laboratory</a>
 
