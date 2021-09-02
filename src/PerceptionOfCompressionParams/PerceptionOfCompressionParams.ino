@@ -2,14 +2,17 @@
  * MIT License.  use at your own risk.
  */#include <AudioEffectEmpty_F32.h>
 #include <Tympan_Library.h>
- 
+
+// TODO: are these next two things the right audio settings?
 const float sample_rate_Hz = 44100.0f ; //24000 or 44100 (or 44117, or other frequencies in the table in AudioOutputI2S_F32)
 const int audio_block_samples = 32;     //do not make bigger than AUDIO_BLOCK_SAMPLES from AudioStream.h (which is 128)
 AudioSettings_F32 audio_settings(sample_rate_Hz, audio_block_samples);
+#define MAX_AUDIO_MEM 60
 
 //create audio library objects for handling the audio
 Tympan                    myTympan(TympanRev::E, audio_settings);     //do TympanRev::D or TympanRev::E
 AudioInputI2S_F32         i2s_in;                     //Digital audio in *from* the Teensy Audio Board ADC.
+AudioSDWriter_F32         audioSDWriter(audio_settings);
 AudioEffectGain_F32       gainL;                      //Applies digital gain to audio data.  Left.
 AudioEffectGain_F32       gainR;                      //Applies digital gain to audio data.  Right.
 AudioOutputI2S_F32        i2s_out;                    //Digital audio out *to* the Teensy Audio Board DAC.
@@ -17,6 +20,10 @@ AudioOutputI2S_F32        i2s_out;                    //Digital audio out *to* t
 //Make all of the audio connections
 AudioConnection_F32       patchCord1(i2s_in, 0, gainL, 0);    //connect the Left input
 AudioConnection_F32       patchCord2(i2s_in, 1, gainR, 0);    //connect the Right input
+//Connect to SD logging
+AudioConnection_F32       patchCord3(i2s_in, 0, audioSDWriter, 0); //connect Raw audio to left channel of SD writer
+AudioConnection_F32       patchCord4(i2s_in, 1, audioSDWriter, 1); //connect Raw audio to right channel of SD writer
+
 AudioConnection_F32       patchCord11(gainL, 0, i2s_out, 0);  //connect the Left gain to the Left output
 AudioConnection_F32       patchCord12(gainR, 0, i2s_out, 1);  //connect the Right gain to the Right output
 
@@ -37,7 +44,7 @@ void setup() {
   Serial.println("BasicGain_wApp: starting setup()...");
 
   //allocate the dynamic memory for audio processing blocks
-  AudioMemory_F32(10); 
+  AudioMemory_F32(MAX_AUDIO_MEM, audio_settings);
 
   //Enable the Tympan to start the audio flowing!
   myTympan.enable(); // activate the Tympan's audio module
@@ -57,6 +64,12 @@ void setup() {
   while (Serial1.available()) Serial1.read(); //clear the incoming Serial1 (BT) buffer
   ble.setupBLE(myTympan.getBTFirmwareRev());  //this uses the default firmware assumption. You can override!
 
+  //prepare the SD writer for the format that we want
+  audioSDWriter.setSerial(&myTympan);
+  //this is the default type. TODO any benefit from changing that to FLOAT32?
+  audioSDWriter.setWriteDataType(AudioSDWriter::WriteDataType::INT16);
+  audioSDWriter.setNumWriteChannels(2);
+
   Serial.println("Setup complete.");
 } //end setup()
 
@@ -66,6 +79,8 @@ void loop() {
   
   //look for in-coming serial messages (via USB or via Bluetooth)
   if (Serial.available()) respondToByte((char)Serial.read());   //USB Serial
+
+  serviceSD();
 
   //respond to BLE
   if (ble.available() > 0) {
@@ -99,6 +114,17 @@ void respondToByte(char c) {
       printGainLevels();
       setButtonText("gainIndicator", String(digital_gain_dB));
       break;
+    case 'R':
+       myTympan.println("Received: begin SD recording");
+       audioSDWriter.prepareSDforRecording();
+       audioSDWriter.startRecording();
+       setButtonState("recordOnButton", true);
+       break;
+    case 'Q':
+      myTympan.println("Received: stop SD recording");
+      audioSDWriter.stopRecording();
+      setButtonState("recordOnButton", false);
+      break;
   }
 }
 
@@ -119,6 +145,9 @@ void createTympanRemoteLayout(void) {
   TR_Page *page_h;  //dummy handle for a page
   TR_Card *card_h;  //dummy handle for a card
 
+  TR_Card *card_record_handle;  //dummy handle for a card
+
+
   //Add first page to GUI
   page_h = myGUI.addPage("Currently Just a Copy of Gain Demo");
       //Add a card under the first page
@@ -131,6 +160,10 @@ void createTympanRemoteLayout(void) {
   
           //Add a "+" digital gain button with the Label("+"); Command("K"); Internal ID ("minusButton"); and width (4)
           card_h->addButton("+","k","plusButton",4);   //displayed string, command, button ID, button width (out of 12)
+      card_record_handle = page_h->addCard("RECORD COMMENTS");
+          card_record_handle->addButton("ON", "R", "recordOnButton", 4);
+          card_record_handle->addButton("Record", "", "recordingindicator", 4);
+          card_record_handle->addButton("OFF", "Q", "recordOff", 4);
         
   //add some pre-defined pages to the GUI
   myGUI.addPredefinedPage("serialMonitor");
@@ -154,8 +187,59 @@ void printGainLevels(void) {
   Serial.println(digital_gain_dB); //print text to Serial port for debugging
 }
 
+void setButtonState(String btnId, boolean newState) {
+  String str = "STATE=BTN:" + btnId + ":";
+  str = newState ? str + "1" : str + "0";
+  myTympan.println(str);
+  ble.sendMessage(str);
+}
+
 void setButtonText(String btnId, String text) {
   String str = "TEXT=BTN:" + btnId + ":"+text;
   Serial.println(str);
   ble.sendMessage(str);
+}
+
+void serviceSD(void) {
+  static int max_max_bytes_written = 0; //for timing diagnotstics
+  static int max_bytes_written = 0; //for timing diagnotstics
+  static int max_dT_micros = 0; //for timing diagnotstics
+  static int max_max_dT_micros = 0; //for timing diagnotstics
+
+  unsigned long dT_micros = micros();  //for timing diagnotstics
+  int bytes_written = audioSDWriter.serviceSD();
+  dT_micros = micros() - dT_micros;  //timing calculation
+
+  if ( bytes_written > 0 ) {
+
+    max_bytes_written = max(max_bytes_written, bytes_written);
+    max_dT_micros = max((int)max_dT_micros, (int)dT_micros);
+
+    if (dT_micros > 10000) {  //if the write took a while, print some diagnostic info
+
+      max_max_bytes_written = max(max_bytes_written,max_max_bytes_written);
+      max_max_dT_micros = max(max_dT_micros, max_max_dT_micros);
+
+      Serial.print("serviceSD: bytes written = ");
+      Serial.print(bytes_written); Serial.print(", ");
+      Serial.print(max_bytes_written); Serial.print(", ");
+      Serial.print(max_max_bytes_written); Serial.print(", ");
+      Serial.print("dT millis = ");
+      Serial.print((float)dT_micros/1000.0,1); Serial.print(", ");
+      Serial.print((float)max_dT_micros/1000.0,1); Serial.print(", ");
+      Serial.print((float)max_max_dT_micros/1000.0,1);Serial.print(", ");
+      Serial.println();
+      max_bytes_written = 0;
+      max_dT_micros = 0;
+    }
+    //print a warning if there has been an SD writing hiccup
+    if (i2s_in.get_isOutOfMemory()) {
+      float approx_time_sec = ((float)(millis()-audioSDWriter.getStartTimeMillis()))/1000.0;
+      if (approx_time_sec > 0.1) {
+        myTympan.print("SD Write Warning: there was a hiccup in the writing.");//  Approx Time (sec): ");
+        myTympan.println(approx_time_sec );
+      }
+    }
+    i2s_in.clear_isOutOfMemory();
+  }
 }
