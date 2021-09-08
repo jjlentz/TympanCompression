@@ -11,11 +11,11 @@ AudioSettings_F32 audio_settings(sample_rate_Hz, audio_block_samples);
 
 //create audio library objects for handling the audio
 Tympan                    myTympan(TympanRev::E, audio_settings);     //do TympanRev::D or TympanRev::E
-AudioInputI2S_F32         i2s_in;                     //Digital audio in *from* the Teensy Audio Board ADC.
+AudioInputI2S_F32         i2s_in(audio_settings);                     //Digital audio in *from* the Teensy Audio Board ADC.
 AudioSDWriter_F32         audioSDWriter(audio_settings);
 AudioEffectGain_F32       gainL;                      //Applies digital gain to audio data.  Left.
 AudioEffectGain_F32       gainR;                      //Applies digital gain to audio data.  Right.
-AudioOutputI2S_F32        i2s_out;                    //Digital audio out *to* the Teensy Audio Board DAC.
+AudioOutputI2S_F32        i2s_out(audio_settings);                    //Digital audio out *to* the Teensy Audio Board DAC.
 
 //Make all of the audio connections
 AudioConnection_F32       patchCord1(i2s_in, 0, gainL, 0);    //connect the Left input
@@ -35,7 +35,7 @@ BLE ble = BLE(&Serial1);
 
 
 // define the setup() function, the function that is called once when the device is booting
-const float input_gain_dB = 10.0f; //gain on the microphone
+const float input_gain_dB = 15.0f; //gain on the microphone
 float digital_gain_dB = 0.0;      //this will be set by the app
 void setup() {
 
@@ -49,8 +49,10 @@ void setup() {
   //Enable the Tympan to start the audio flowing!
   myTympan.enable(); // activate the Tympan's audio module
 
+  myTympan.enableDigitalMicInputs(false);
   //Choose the desired input
   myTympan.inputSelect(TYMPAN_INPUT_ON_BOARD_MIC);     // use the on board microphones
+  
   //myTympan.inputSelect(TYMPAN_INPUT_JACK_AS_MIC);    // use the microphone jack - defaults to mic bias 2.5V
   //myTympan.inputSelect(TYMPAN_INPUT_JACK_AS_LINEIN); // use the microphone jack - defaults to mic bias OFF
 
