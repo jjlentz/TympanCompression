@@ -1,7 +1,9 @@
 /*
  * MIT License.  use at your own risk.
- */#include <AudioEffectEmpty_F32.h>
+ */
+#include <AudioEffectEmpty_F32.h>
 #include <Tympan_Library.h>
+#include "SerialManager.h"
 
 // TODO: are these next two things the right audio settings?
 const float sample_rate_Hz = 44100.0f ; //24000 or 44100 (or 44117, or other frequencies in the table in AudioOutputI2S_F32)
@@ -32,10 +34,12 @@ TympanRemoteFormatter myGUI;  //Creates the GUI-writing class for interacting wi
 
 //Create BLE
 BLE ble = BLE(&Serial1);
+SerialManager serialManager;
 
 
 // define the setup() function, the function that is called once when the device is booting
-const float input_gain_dB = 15.0f; //gain on the microphone
+
+const float input_gain_dB = 15.0f; // Pretty sure serves no purpose in our project and can be removed
 float digital_gain_dB = 0.0;      //this will be set by the app
 void setup() {
 
@@ -80,14 +84,14 @@ void setup() {
 void loop() {
   
   //look for in-coming serial messages (via USB or via Bluetooth)
-  if (Serial.available()) respondToByte((char)Serial.read());   //USB Serial
+  if (Serial.available()) serialManager.respondToByte((char)Serial.read());   //USB Serial
 
   serviceSD();
 
   //respond to BLE
   if (ble.available() > 0) {
     String msgFromBle; int msgLen = ble.recvBLE(&msgFromBle);
-    for (int i=0; i < msgLen; i++) respondToByte(msgFromBle[i]);
+    for (int i=0; i < msgLen; i++) serialManager.respondToByte(msgFromBle[i]);
   }
 
   //service the BLE advertising state
@@ -98,47 +102,6 @@ void loop() {
 
 // ///////////////// Servicing routines
 
-//respond to serial commands
-void respondToByte(char c) {
-  Serial.print("Received character "); Serial.println(c);
-  
-  switch (c) {
-    case 'J': case 'j':           //The TympanRemote app sends a 'J' to the Tympan when it connects
-      printTympanRemoteLayout();  //in resonse, the Tympan sends the definition of the GUI that we'd like
-      break;
-    case 'k':
-      changeGain(3.0);
-      printGainLevels();
-      setButtonText("gainIndicator", String(digital_gain_dB));
-      break;
-    case 'K':
-      changeGain(-3.0);
-      printGainLevels();
-      setButtonText("gainIndicator", String(digital_gain_dB));
-      break;
-    case 'R':
-       myTympan.println("Received: begin SD recording");
-       audioSDWriter.prepareSDforRecording();
-       audioSDWriter.startRecording();
-       setButtonState("recordOnButton", true);
-       break;
-    case 'Q':
-      myTympan.println("Received: stop SD recording");
-      audioSDWriter.stopRecording();
-      setButtonState("recordOnButton", false);
-      break;
-  }
-}
-
-// Print the layout for the Tympan Remote app, in a JSON-ish string
-// (single quotes are used here, whereas JSON spec requires double quotes.  The app converts ' to " before parsing the JSON string).
-// Please don't put commas or colons in your ID strings!
-void printTympanRemoteLayout(void) {
-  if (myGUI.get_nPages() < 1) createTympanRemoteLayout();  //create the GUI, if it hasn't already been created
-  Serial.println(myGUI.asString());
-  ble.sendMessage(myGUI.asString());
-  setButtonText("gainIndicator", String(digital_gain_dB));
-}
 
 //define the GUI for the App
 void createTympanRemoteLayout(void) {
@@ -170,36 +133,6 @@ void createTympanRemoteLayout(void) {
   //add some pre-defined pages to the GUI
   myGUI.addPredefinedPage("serialMonitor");
   //myGUI.addPredefinedPage("serialPlotter");
-}
-
-
-//change the gain from the App
-void changeGain(float change_in_gain_dB) {
-  digital_gain_dB = digital_gain_dB + change_in_gain_dB;
-  gainL.setGain_dB(digital_gain_dB);  //set the gain of the Left-channel gain processor
-  gainR.setGain_dB(digital_gain_dB);  //set the gain of the Right-channel gain processor
-}
-
-
-//Print gain levels 
-void printGainLevels(void) {
-  Serial.print("Analog Input Gain (dB) = "); 
-  Serial.println(input_gain_dB); //print text to Serial port for debugging
-  Serial.print("Digital Gain (dB) = "); 
-  Serial.println(digital_gain_dB); //print text to Serial port for debugging
-}
-
-void setButtonState(String btnId, boolean newState) {
-  String str = "STATE=BTN:" + btnId + ":";
-  str = newState ? str + "1" : str + "0";
-  myTympan.println(str);
-  ble.sendMessage(str);
-}
-
-void setButtonText(String btnId, String text) {
-  String str = "TEXT=BTN:" + btnId + ":"+text;
-  Serial.println(str);
-  ble.sendMessage(str);
 }
 
 void serviceSD(void) {
