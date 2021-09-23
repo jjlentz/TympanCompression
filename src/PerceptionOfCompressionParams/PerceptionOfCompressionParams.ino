@@ -3,6 +3,7 @@
  */
 #include <AudioEffectEmpty_F32.h>
 #include <Tympan_Library.h>
+#include <SD.h>  // for text logging to the SD card
 #include "SerialManager.h"
 
 // TODO: are these next two things the right audio settings?
@@ -13,8 +14,11 @@ AudioSettings_F32 audio_settings(sample_rate_Hz, audio_block_samples);
 
 //create audio library objects for handling the audio
 Tympan                    myTympan(TympanRev::E, audio_settings);     //do TympanRev::D or TympanRev::E
+SDClass                   sdx;  // explicitly create SD card, which we will pass to AudioSDWriter *and* which we will use for text logging
+String experiment_log_filename = "ExperimentLog.txt";
+
 AudioInputI2S_F32         i2s_in(audio_settings);                     //Digital audio in *from* the Teensy Audio Board ADC.
-AudioSDWriter_F32         audioSDWriter(audio_settings);
+AudioSDWriter_F32         audioSDWriter(&(sdx.sdfs), audio_settings);
 AudioEffectGain_F32       gainL;                      //Applies digital gain to audio data.  Left.
 AudioEffectGain_F32       gainR;                      //Applies digital gain to audio data.  Right.
 AudioOutputI2S_F32        i2s_out(audio_settings);                    //Digital audio out *to* the Teensy Audio Board DAC.
@@ -76,6 +80,9 @@ void setup() {
   audioSDWriter.setWriteDataType(AudioSDWriter::WriteDataType::INT16);
   audioSDWriter.setNumWriteChannels(2);
 
+  if (!sdx.sdfs.begin(SdioConfig(FIFO_SDIO)))
+    sdx.sdfs.errorHalt(&Serial, "setup: SD begin failed!");
+
   Serial.println("Setup complete.");
 } //end setup()
 
@@ -108,7 +115,7 @@ void createTympanRemoteLayout(void) {
   
   // Create some temporary variables
   TR_Page *page_h;  //dummy handle for a page
-  TR_Card *card_h;  //dummy handle for a card
+  TR_Card *card_handle_1;  //dummy handle for a card
 
   TR_Card *card_record_handle;  //dummy handle for a card
 
@@ -116,15 +123,18 @@ void createTympanRemoteLayout(void) {
   //Add first page to GUI
   page_h = myGUI.addPage("Currently Just a Copy of Gain Demo");
       //Add a card under the first page
-      card_h = page_h->addCard("Change Loudness");
-          //Add a "-" digital gain button with the Label("-"); Command("K"); Internal ID ("minusButton"); and width (4)
-          card_h->addButton("-","K","minusButton",4);  //displayed string, command, button ID, button width (out of 12)
+      card_handle_1 = page_h->addCard("Change Loudness");
+          //Add a "-" digital gain button with the Label("-"); Command("A"); Internal ID ("minusButton"); and width (4)
+          card_handle_1->addButton("-", "A", "minusButton", 4);  //displayed string, command, button ID, button width (out of 12)
 
           //Add an indicator that's a button with no command:  Label (value of the digital gain); Command (""); Internal ID ("gain indicator"); width (4).
-          card_h->addButton("","","gainIndicator",4);  //displayed string (blank for now), command (blank), button ID, button width (out of 12)
+          card_handle_1->addButton("","","gainIndicator",4);  //displayed string (blank for now), command (blank), button ID, button width (out of 12)
   
           //Add a "+" digital gain button with the Label("+"); Command("K"); Internal ID ("minusButton"); and width (4)
-          card_h->addButton("+","k","plusButton",4);   //displayed string, command, button ID, button width (out of 12)
+          card_handle_1->addButton("+", "B", "plusButton", 4);   //displayed string, command, button ID, button width (out of 12)
+          card_handle_1->addButton("^-", 'a', "AisBest", 4);
+          card_handle_1->addButton("", "", "aSpaceb", 4);
+          card_handle_1->addButton("^+", 'b', "BisBest", 4);
       card_record_handle = page_h->addCard("RECORD COMMENTS");
           card_record_handle->addButton("ON", "R", "recordOnButton", 4);
           card_record_handle->addButton("Record", "", "recordingindicator", 4);
@@ -177,4 +187,13 @@ void serviceSD(void) {
     }
     i2s_in.clear_isOutOfMemory();
   }
+}
+
+void writeTextToSD(String results) {
+  Serial.println("writeTextToSD: opening " + String(experiment_log_filename));
+  FsFile resultsFile = sdx.sdfs.open(experiment_log_filename,  O_WRITE | O_CREAT | O_APPEND);
+  Serial.println("writeTextToSD: writing: " + results);
+  resultsFile.println(results);
+  Serial.println("writeTextToSD: closing file.");
+  resultsFile.close();
 }
