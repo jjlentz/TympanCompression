@@ -13,6 +13,7 @@ extern AudioEffectGain_F32 gainR;
 extern TympanRemoteFormatter myGUI;
 
 extern void createTympanRemoteLayout(void);
+extern void writeTextToSD(String results);
 
 class SerialManager {
   public:
@@ -36,15 +37,23 @@ void SerialManager::respondToByte(char c) {
       case 'j':           //The TympanRemote app sends a 'J' to the Tympan when it connects
       printTympanRemoteLayout();  //in resonse, the Tympan sends the definition of the GUI that we'd like
       break;
-    case 'k':
+    case 'A':
+      changeGain(-3.0);
+      printGainLevels();
+      setButtonText("gainIndicator", String(digital_gain_dB));
+      break;
+    case 'a':
+      // write to the SD card that 'A' was the preferred selection
+      writeTextToSD("Comparison A vs B: winner A");
+      break;
+    case 'B':
       changeGain(3.0);
       printGainLevels();
       setButtonText("gainIndicator", String(digital_gain_dB));
       break;
-    case 'K':
-      changeGain(-3.0);
-      printGainLevels();
-      setButtonText("gainIndicator", String(digital_gain_dB));
+    case 'b':
+      // write to the SD card that 'B' was the preferred selection
+      writeTextToSD("Comparison A vs B: winner B");
       break;
     case 'R':
        myTympan.println("Received: begin SD recording");
