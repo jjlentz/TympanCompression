@@ -12,6 +12,8 @@ class State : public TympanStateBase_UI {
   float output_gain_dB = 0.0;
   // check the base class to see if this is already there
   float digital_gain_dB = 0.0;
+  int newExperimentTone = 0;
+  unsigned long toneStartTime = 0;
 };
 
 #endif

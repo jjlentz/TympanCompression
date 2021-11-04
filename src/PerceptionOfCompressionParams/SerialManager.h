@@ -3,6 +3,7 @@
 
 #include <Tympan_Library.h>
 #include "State.h"
+#include <FlexiTimer2.h>
 
 extern Tympan myTympan;
 
@@ -11,11 +12,13 @@ extern State myState;
 extern void setConfiguration(void);
 extern float incrementInputGain(float);
 extern void writeTextToSD(String text);
+extern void doWhatever(void);
 
 class SerialManager : public SerialManagerBase {
   public:
     SerialManager(BLE *_ble) : SerialManagerBase(_ble) {};
 
+    void startTimer(void);
     void printHelp(void);
     void createTympanRemoteLayout(void);
     void printTympanRemoteLayout(void);
@@ -32,11 +35,16 @@ class SerialManager : public SerialManagerBase {
     void printGainLevels(String change);
 };
 
+void SerialManager::startTimer(void) {
+  FlexiTimer2::set(60, 1, doWhatever);
+  FlexiTimer2::start();
+}
+
 void SerialManager::printHelp(void) {
   Serial.println("SerialManager Help: Available Commands:");
   Serial.println("  tbd");
   SerialManagerBase::printHelp();
-  Serial.println();  
+  Serial.println();
 }
 
 bool SerialManager::processCharacter(char c) {
@@ -45,7 +53,7 @@ bool SerialManager::processCharacter(char c) {
     case 'h':
       printHelp();
       break;
-    case 'J': 
+    case 'J':
     case 'j':           //The TympanRemote app sends a 'J' to the Tympan when it connects
       printTympanRemoteLayout();  //in resonse, the Tympan sends the definition of the GUI that we'd like
       break;
@@ -85,14 +93,14 @@ void SerialManager::createTympanRemoteLayout(void) {
 
           //Add an indicator that's a button with no command:  Label (value of the digital gain); Command (""); Internal ID ("gain indicator"); width (4).
           card_handle->addButton("","","inpGain",4);  //displayed string (blank for now), command (blank), button ID, button width (out of 12)
-  
+
           //Add a "+" digital gain button with the Label("+"); Command("K"); Internal ID ("minusButton"); and width (4)
           card_handle->addButton("+", "B", "plusButton", 4);   //displayed string, command, button ID, button width (out of 12)
           card_handle->addButton("Less OK", 'a', "AisBest", 4);
           card_handle->addButton("", "", "aSpaceb", 4);
           card_handle->addButton("More OK", 'b', "BisBest", 4);
       card_handle = audioSDWriter.addCard_sdRecord(page_handle);
-        
+
   //add some pre-defined pages to the GUI
   myGUI.addPredefinedPage("serialMonitor");
 
@@ -119,12 +127,12 @@ void SerialManager::updateGUI_inputGain(bool activeButtonsOnly) {
   setButtonText("inpGain", String(myState.input_gain_dB, 1));
 }
 
-  //Print gain levels 
+  //Print gain levels
 void SerialManager::printGainLevels(String change) {
     writeTextToSD(String(millis()) + ", Input_Gain_dB: " + String(myState.input_gain_dB) + " " + change);
-    Serial.print(change + " Analog Input Gain = " + String(myState.input_gain_dB) + " dB"); 
+    Serial.print(change + " Analog Input Gain = " + String(myState.input_gain_dB) + " dB");
     Serial.println(myState.input_gain_dB); //print text to Serial port for debugging
-    Serial.print("Digital Gain = " + String(myState.digital_gain_dB) + " dB"); 
+    Serial.print("Digital Gain = " + String(myState.digital_gain_dB) + " dB");
     updateGUI_inputGain(true);
 }
 

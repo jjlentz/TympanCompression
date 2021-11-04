@@ -12,6 +12,7 @@ AudioSettings_F32 audio_settings(sample_rate_Hz, audio_block_samples);
 Tympan myTympan(TympanRev::E); 
 SDClass sdx;  // explicitly create SD card, which we will pass to AudioSDWriter *and* which we will use for text logging
 String experiment_log_filename = "ExperimentLog.txt";
+AudioSynthWaveform_F32    sineWave(audio_settings); 
 
 AudioInputI2S_F32    i2s_in(audio_settings);                     //Digital audio in *from* the Teensy Audio Board ADC.
 AudioSDWriter_F32_UI audioSDWriter(&(sdx.sdfs), audio_settings);
@@ -24,18 +25,22 @@ AudioConnection_F32       patchCord2(i2s_in, 1, i2s_out, 0);    //connect the Ri
 AudioConnection_F32       patchCord3(i2s_in, 0, audioSDWriter, 0); //connect Raw audio to left channel of SD writer
 AudioConnection_F32       patchCord4(i2s_in, 1, audioSDWriter, 1); //connect Raw audio to right channel of SD writer
 
+AudioConnection_F32 patchCord10(sineWave, 0, i2s_out, 0);  //connect to left output
+AudioConnection_F32 patchCord11(sineWave, 0, i2s_out, 1);  //connect to right output
+
 #include "SerialManager.h"
 #include "State.h"
 //Create BLE
 BLE_UI ble(&Serial1);
 SerialManager serialManager(&ble);
 State myState(&audio_settings, &myTympan, &serialManager);
- 
+
 float digital_gain_dB = 0.0;      //this will be set by the app
 void setupSerialManager() {
   serialManager.add_UI_element(&myState);
   serialManager.add_UI_element(&ble);
   serialManager.add_UI_element(&audioSDWriter);
+  serialManager.startTimer();
 }
 
 float setInputGain_dB(float val_dB) {
@@ -44,16 +49,16 @@ float setInputGain_dB(float val_dB) {
 
 void setConfiguration(void) {
   const float default_input_gain_dB = 15.0f;
-  // could set some input source or something else with config 
+  // could set some input source or something else with config
   myTympan.inputSelect(TYMPAN_INPUT_ON_BOARD_MIC);     // use the on board microphones
   setInputGain_dB(default_input_gain_dB);
-  
+
   //myTympan.inputSelect(TYMPAN_INPUT_JACK_AS_MIC);    // use the microphone jack - defaults to mic bias 2.5V
   //myTympan.inputSelect(TYMPAN_INPUT_JACK_AS_LINEIN); // use the microphone jack - defaults to mic bias OFF
-}  
+}
 
 void setup() {
-    
+
   //begin the serial comms (for debugging)
   myTympan.beginBothSerial();
   delay(1000);
@@ -77,7 +82,7 @@ void setup() {
   delay(500);
 
   setupSerialManager();
-  
+
   //prepare the SD writer for the format that we want
   audioSDWriter.setSerial(&myTympan);
   audioSDWriter.setNumWriteChannels(2);
@@ -97,7 +102,7 @@ void loop() {
 
   //respond to BLE
   if (ble.available() > 0) {
-    String msgFromBle; 
+    String msgFromBle;
     int msgLen = ble.recvBLE(&msgFromBle);
     for (int i=0; i < msgLen; i++) {
       serialManager.respondToByte(msgFromBle[i]);
@@ -112,18 +117,29 @@ void loop() {
 
   static int prev_SD_state = (int)audioSDWriter.getState();
   if ((int)audioSDWriter.getState() != prev_SD_state) {
-    writeTextToSD(String(millis() + String(", audioSDWriter_State = ") 
+    writeTextToSD(String(millis() + String(", audioSDWriter_State = ")
       + String((int)audioSDWriter.getState())));
   }
   prev_SD_state = (int)audioSDWriter.getState();
 
   //service the LEDs...blink slow normally, blink fast if recording
-  myTympan.serviceLEDs(millis(), audioSDWriter.getState() == AudioSDWriter::STATE::RECORDING); 
+  myTympan.serviceLEDs(millis(), audioSDWriter.getState() == AudioSDWriter::STATE::RECORDING);
 
   //periodically print the CPU and Memory Usage
 //  if (myState.flag_printCPUandMemory) myState.printCPUandMemory(millis(), 3000); //print every 3000msec  (method is built into TympanStateBase.h, which myState inherits from)
 //  if (myState.flag_printCPUandMemory) myState.printCPUtoGUI(millis(), 3000);     //send to App every 3000msec (method is built into TympanStateBase.h, which myState inherits from)
-
+  if (myState.newExperimentTone > 0 && myState.toneStartTime == 0) {
+    myState.toneStartTime = millis();
+    sineWave.amplitude(0.03);
+    myTympan.setAmberLED(HIGH);
+  } else if (myState.toneStartTime > 0) {
+    if ((millis() - myState.toneStartTime) >= myState.newExperimentTone) {
+      myState.newExperimentTone = 0;
+      myState.toneStartTime = 0;
+      sineWave.amplitude(0.0f);
+      myTympan.setAmberLED(LOW);
+    }
+  }
 
 } //end loop();
 
@@ -138,4 +154,9 @@ void writeTextToSD(String results) {
 
 float incrementInputGain(float increment_dB) {
   return setInputGain_dB(myState.input_gain_dB + increment_dB);
+}
+
+void doWhatever(void) {
+  writeTextToSD(String(millis()) + ", Time for a new experiment.");
+  myState.newExperimentTone = 10000;
 }
