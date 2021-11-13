@@ -83,6 +83,7 @@ bool SerialManager::processCharacter(char c) {
 void SerialManager::createTympanRemoteLayout(void) {
   TR_Page *page_handle;
   TR_Card *card_handle;
+  TR_Card *card_handle2;
 
     //Add first page to GUI
   page_handle = myGUI.addPage("Perception of Compression Params");
@@ -99,6 +100,21 @@ void SerialManager::createTympanRemoteLayout(void) {
           card_handle->addButton("Less OK", 'a', "AisBest", 4);
           card_handle->addButton("", "", "aSpaceb", 4);
           card_handle->addButton("More OK", 'b', "BisBest", 4);
+ 
+     //Add a second card under the first page
+      card_handle2 = page_handle->addCard("Change Settings");
+          //Add a '1' button for slow compression and a '2' button for fast compression
+          card_handle2->addButton("1", "S", "slowButton", 4);  //displayed string, command, button ID, button width (out of 12)
+
+          //Add an indicator that's a button with no command:  Label (value of the digital gain); Command (""); Internal ID ("gain indicator"); width (4).
+          //card_handle->addButton("","","inpGain",4);  //displayed string (blank for now), command (blank), button ID, button width (out of 12)
+
+          card_handle2->addButton("", "", "aSpaceb", 4);
+          card_handle2->addButton("2", "F", "fastButton", 4);   //displayed string, command, button ID, button width (out of 12)
+          card_handle2->addButton("1 Better", 's', "1isBest", 4);
+          card_handle2->addButton("", "", "aSpaceb", 4);
+          card_handle2->addButton("2 Better", 'f', "2isBest", 4);
+           
       card_handle = audioSDWriter.addCard_sdRecord(page_handle);
 
   //add some pre-defined pages to the GUI
