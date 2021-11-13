@@ -25,8 +25,8 @@ AudioConnection_F32       patchCord2(i2s_in, 1, i2s_out, 0);    //connect the Ri
 AudioConnection_F32       patchCord3(i2s_in, 0, audioSDWriter, 0); //connect Raw audio to left channel of SD writer
 AudioConnection_F32       patchCord4(i2s_in, 1, audioSDWriter, 1); //connect Raw audio to right channel of SD writer
 
-AudioConnection_F32 patchCord10(sineWave, 0, i2s_out, 0);  //connect to left output
-AudioConnection_F32 patchCord11(sineWave, 0, i2s_out, 1);  //connect to right output
+//AudioConnection_F32 patchCord10(sineWave, 0, i2s_out, 0);  //connect to left output
+//AudioConnection_F32 patchCord11(sineWave, 0, i2s_out, 1);  //connect to right output
 
 #include "SerialManager.h"
 #include "State.h"
@@ -154,6 +154,22 @@ void writeTextToSD(String results) {
 
 float incrementInputGain(float increment_dB) {
   return setInputGain_dB(myState.input_gain_dB + increment_dB);
+}
+
+// Does it make sense to combine doSlowCompression and doFastCompression if we can parameterize?
+void doSlowCompression(void) {
+  Serial.println("Switching to the slow compression algorithm");
+}
+
+void doFastCompression(void) {
+  Serial.println("Switching to the fast compression algorithm");
+}
+// what all needs to be logged for the Science?
+void logCompressionPreference(char c) {
+  // If all we need to do is write a simple selection, we can
+  // delete this function and call WriteTextToSD
+  // But if we have a large structure to log...
+  writeTextToSD("The user selected a compression preference for option " + String(c));
 }
 
 void doWhatever(void) {
