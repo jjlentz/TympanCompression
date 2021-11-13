@@ -13,6 +13,10 @@ extern void setConfiguration(void);
 extern float incrementInputGain(float);
 extern void writeTextToSD(String text);
 extern void doWhatever(void);
+extern void doSlowCompression(void);
+extern void doFastCompression(void);
+extern void logCompressionPreference(char c);
+
 
 class SerialManager : public SerialManagerBase {
   public:
@@ -73,6 +77,17 @@ bool SerialManager::processCharacter(char c) {
       // write to the SD card that 'B' was the preferred selection
       writeTextToSD("Comparison A vs B: winner B");
       break;
+    case 'S':
+      doSlowCompression();
+      break;
+    case 'F':
+      doFastCompression();
+      break;
+    case 's':
+       // falls through on purpose
+    case 'f':
+      logCompressionPreference(c);
+      break;      
     default:
       ret_val = SerialManagerBase::processCharacter(c);
       break;
@@ -82,40 +97,39 @@ bool SerialManager::processCharacter(char c) {
 
 void SerialManager::createTympanRemoteLayout(void) {
   TR_Page *page_handle;
-  TR_Card *card_handle;
-  TR_Card *card_handle2;
+  TR_Card *card_gain_handle;
+  TR_Card *card_comp_handle;
 
     //Add first page to GUI
   page_handle = myGUI.addPage("Perception of Compression Params");
       //Add a card under the first page
-      card_handle = page_handle->addCard("Change Loudness");
+      card_gain_handle = page_handle->addCard("Change Loudness");
+
           //Add a "-" digital gain button with the Label("-"); Command("A"); Internal ID ("minusButton"); and width (4)
-          card_handle->addButton("-", "A", "minusButton", 4);  //displayed string, command, button ID, button width (out of 12)
-
+          card_gain_handle->addButton("-", "A", "minusButton", 4);  //displayed string, command, button ID, button width (out of 12)
           //Add an indicator that's a button with no command:  Label (value of the digital gain); Command (""); Internal ID ("gain indicator"); width (4).
-          card_handle->addButton("","","inpGain",4);  //displayed string (blank for now), command (blank), button ID, button width (out of 12)
-
+          card_gain_handle->addButton("","","inpGain",4);  //displayed string (blank for now), command (blank), button ID, button width (out of 12)
           //Add a "+" digital gain button with the Label("+"); Command("K"); Internal ID ("minusButton"); and width (4)
-          card_handle->addButton("+", "B", "plusButton", 4);   //displayed string, command, button ID, button width (out of 12)
-          card_handle->addButton("Less OK", 'a', "AisBest", 4);
-          card_handle->addButton("", "", "aSpaceb", 4);
-          card_handle->addButton("More OK", 'b', "BisBest", 4);
- 
+          card_gain_handle->addButton("+", "B", "plusButton", 4);   //displayed string, command, button ID, button width (out of 12)
+
+          card_gain_handle->addButton("Less OK", 'a', "AisBest", 4);
+          card_gain_handle->addButton("", "", "aSpaceb", 4);
+          card_gain_handle->addButton("More OK", 'b', "BisBest", 4);
+
      //Add a second card under the first page
-      card_handle2 = page_handle->addCard("Change Settings");
+      card_comp_handle = page_handle->addCard("Change Settings");
+
           //Add a '1' button for slow compression and a '2' button for fast compression
-          card_handle2->addButton("1", "S", "slowButton", 4);  //displayed string, command, button ID, button width (out of 12)
+          card_comp_handle->addButton("1", "S", "slowButton", 4);  //displayed string, command, button ID, button width (out of 12)
+          card_comp_handle->addButton("", "", "aSpaceb", 4);
+          card_comp_handle->addButton("2", "F", "fastButton", 4);   //displayed string, command, button ID, button width (out of 12)
 
-          //Add an indicator that's a button with no command:  Label (value of the digital gain); Command (""); Internal ID ("gain indicator"); width (4).
-          //card_handle->addButton("","","inpGain",4);  //displayed string (blank for now), command (blank), button ID, button width (out of 12)
+          card_comp_handle->addButton("1 Better", 's', "1isBest", 4);
+          card_comp_handle->addButton("", "", "aSpaceb", 4);
+          card_comp_handle->addButton("2 Better", 'f', "2isBest", 4);
 
-          card_handle2->addButton("", "", "aSpaceb", 4);
-          card_handle2->addButton("2", "F", "fastButton", 4);   //displayed string, command, button ID, button width (out of 12)
-          card_handle2->addButton("1 Better", 's', "1isBest", 4);
-          card_handle2->addButton("", "", "aSpaceb", 4);
-          card_handle2->addButton("2 Better", 'f', "2isBest", 4);
-           
-      card_handle = audioSDWriter.addCard_sdRecord(page_handle);
+      //card_handle = audioSDWriter.addCard_sdRecord(page_handle);
+      audioSDWriter.addCard_sdRecord(page_handle);
 
   //add some pre-defined pages to the GUI
   myGUI.addPredefinedPage("serialMonitor");
