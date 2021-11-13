@@ -4,8 +4,8 @@
 #include <Tympan_Library.h>
 #include <SD.h>  // for text logging to the SD card
 
-const float sample_rate_Hz = 44100.0f; 
-const int audio_block_samples = 128;     //do not make bigger than AUDIO_BLOCK_SAMPLES from AudioStream.h (which is 128)
+const float sample_rate_Hz = 444117.64706f; 
+const int audio_block_samples = 32;     //do not make bigger than AUDIO_BLOCK_SAMPLES from AudioStream.h (which is 128)
 AudioSettings_F32 audio_settings(sample_rate_Hz, audio_block_samples);
 #define MAX_AUDIO_MEM 100
 
@@ -18,12 +18,53 @@ AudioInputI2S_F32    i2s_in(audio_settings);                     //Digital audio
 AudioSDWriter_F32_UI audioSDWriter(&(sdx.sdfs), audio_settings);
 AudioOutputI2S_F32   i2s_out(audio_settings);                    //Digital audio out *to* the Teensy Audio Board DAC.
 
+
+//*****Audio objects for the compression algorithm -WDRC_FIR_8BandConstants
+//create audio objects for the algorithm
+#define N_CHAN 8         //number of channels to use for multi-band compression
+AudioEffectGain_F32      preGain;
+AudioFilterFIR_F32       firFilt[N_CHAN];  //here are the filters to break up the audio into multiple bands
+AudioEffectCompWDRC_F32  compPerBand[N_CHAN]; //here are the per-band compressors
+AudioEffectCompWDRC_F32  compBroadband; //here is the broad band compressors
+AudioMixer8_F32          mixer1; //mixer to reconstruct the broadband audio
 //Make the audio connections
-AudioConnection_F32       patchCord1(i2s_in, 0, i2s_out, 0);    //connect the Left input
-AudioConnection_F32       patchCord2(i2s_in, 1, i2s_out, 0);    //connect the Right input
+//AudioConnection_F32       patchCord1(i2s_in, 0, i2s_out, 0);    //connect the Left input
+//AudioConnection_F32       patchCord2(i2s_in, 1, i2s_out, 0);    //connect the Right input
 //Connect to SD logging
+AudioConnection_F32       patchCord1(i2s_in, 0, preGain, 0);   //#8 wants left, #3 wants right. //connect the Left input to the Left Int->Float converter
 AudioConnection_F32       patchCord3(i2s_in, 0, audioSDWriter, 0); //connect Raw audio to left channel of SD writer
 AudioConnection_F32       patchCord4(i2s_in, 1, audioSDWriter, 1); //connect Raw audio to right channel of SD writer
+
+//connect to each of the filters to make the sub-bands
+AudioConnection_F32     patchCord11(preGain, 0, firFilt[0], 0);
+AudioConnection_F32     patchCord12(preGain, 0, firFilt[1], 0);
+AudioConnection_F32     patchCord13(preGain, 0, firFilt[2], 0);
+AudioConnection_F32     patchCord14(preGain, 0, firFilt[3], 0);
+AudioConnection_F32     patchCord15(preGain, 0, firFilt[4], 0);
+AudioConnection_F32     patchCord16(preGain, 0, firFilt[5], 0);
+AudioConnection_F32     patchCord17(preGain, 0, firFilt[6], 0);
+AudioConnection_F32     patchCord18(preGain, 0, firFilt[7], 0);
+//connect each filter to its corresponding per-band compressor
+AudioConnection_F32     patchCord21(firFilt[0], 0, compPerBand[0], 0);
+AudioConnection_F32     patchCord22(firFilt[1], 0, compPerBand[1], 0);
+AudioConnection_F32     patchCord23(firFilt[2], 0, compPerBand[2], 0);
+AudioConnection_F32     patchCord24(firFilt[3], 0, compPerBand[3], 0);
+AudioConnection_F32     patchCord25(firFilt[4], 0, compPerBand[4], 0);
+AudioConnection_F32     patchCord26(firFilt[5], 0, compPerBand[5], 0);
+AudioConnection_F32     patchCord27(firFilt[6], 0, compPerBand[6], 0);
+AudioConnection_F32     patchCord28(firFilt[7], 0, compPerBand[7], 0);
+//compute the output of the per-band compressors to the mixers (to make into one signal again)
+AudioConnection_F32     patchCord31(compPerBand[0], 0, mixer1, 0);
+AudioConnection_F32     patchCord32(compPerBand[1], 0, mixer1, 1);
+AudioConnection_F32     patchCord33(compPerBand[2], 0, mixer1, 2);
+AudioConnection_F32     patchCord34(compPerBand[3], 0, mixer1, 3);
+AudioConnection_F32     patchCord35(compPerBand[4], 0, mixer1, 4);
+AudioConnection_F32     patchCord36(compPerBand[5], 0, mixer1, 5);
+AudioConnection_F32     patchCord37(compPerBand[6], 0, mixer1, 6);
+AudioConnection_F32     patchCord38(compPerBand[7], 0, mixer1, 7);
+//connect the output of the mixers to the final broadband compressor
+AudioConnection_F32     patchCord43(mixer1, 0, compBroadband, 0);
+//**** Done with compression SETUP
 
 //AudioConnection_F32 patchCord10(sineWave, 0, i2s_out, 0);  //connect to left output
 //AudioConnection_F32 patchCord11(sineWave, 0, i2s_out, 1);  //connect to right output
