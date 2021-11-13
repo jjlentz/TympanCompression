@@ -20,13 +20,10 @@ AudioOutputI2S_F32   i2s_out(audio_settings);                    //Digital audio
 
 //Make the audio connections
 AudioConnection_F32       patchCord1(i2s_in, 0, i2s_out, 0);    //connect the Left input
-AudioConnection_F32       patchCord2(i2s_in, 1, i2s_out, 0);    //connect the Right input
+AudioConnection_F32       patchCord2(i2s_in, 1, i2s_out, 1);    //connect the Right input
 //Connect to SD logging
 AudioConnection_F32       patchCord3(i2s_in, 0, audioSDWriter, 0); //connect Raw audio to left channel of SD writer
 AudioConnection_F32       patchCord4(i2s_in, 1, audioSDWriter, 1); //connect Raw audio to right channel of SD writer
-
-//AudioConnection_F32 patchCord10(sineWave, 0, i2s_out, 0);  //connect to left output
-//AudioConnection_F32 patchCord11(sineWave, 0, i2s_out, 1);  //connect to right output
 
 #include "SerialManager.h"
 #include "State.h"
@@ -130,10 +127,14 @@ void loop() {
 //  if (myState.flag_printCPUandMemory) myState.printCPUtoGUI(millis(), 3000);     //send to App every 3000msec (method is built into TympanStateBase.h, which myState inherits from)
   if (myState.newExperimentTone > 0 && myState.toneStartTime == 0) {
     myState.toneStartTime = millis();
+    AudioConnection_F32 patchCord101(sineWave, 0, i2s_out, 0);  //connect to left output
+    AudioConnection_F32 patchCord102(sineWave, 0, i2s_out, 1);  //connect to right output
     sineWave.amplitude(0.03);
     myTympan.setAmberLED(HIGH);
   } else if (myState.toneStartTime > 0) {
     if ((millis() - myState.toneStartTime) >= myState.newExperimentTone) {
+      AudioConnection_F32       patchCord1(i2s_in, 0, i2s_out, 0);    //connect the Left input
+      AudioConnection_F32       patchCord2(i2s_in, 1, i2s_out, 1);
       myState.newExperimentTone = 0;
       myState.toneStartTime = 0;
       sineWave.amplitude(0.0f);
