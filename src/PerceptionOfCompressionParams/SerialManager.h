@@ -9,13 +9,15 @@ extern Tympan myTympan;
 
 extern AudioSDWriter_F32_UI audioSDWriter;
 extern State myState;
-extern void setConfiguration(void);
-extern float incrementInputGain(float);
+extern EarpieceMixer_F32_UI earpieceMixer;
+
+//extern void setConfiguration(void);
+//extern float incrementInputGain(float);
 extern void writeTextToSD(String text);
 extern void doWhatever(void);
-extern void doSlowCompression(void);
-extern void doFastCompression(void);
-extern void logCompressionPreference(char c);
+extern void updateOutputGain(float);
+extern void printOutputGain(void);
+extern void setupMyCompressors(float gain, float attack, float release);
 
 
 class SerialManager : public SerialManagerBase {
@@ -29,14 +31,13 @@ class SerialManager : public SerialManagerBase {
     bool processCharacter(char c);  // called by SerialManagerBase.respondToByte(char c)
 
     void setFullGUIState(bool activeButtonsOnly = false);
-    void updateGUI_inputGain(bool activeButtonsOnly = false);
-
-
-    int gainIncrement_dB = 2.5;
+    void updateGainDisplay(void);
+    void printGainLevels(String change);
     
   private:
     TympanRemoteFormatter myGUI;
-    void printGainLevels(String change);
+    void doFast(void);
+    void doSlow(void);
 };
 
 void SerialManager::startTimer(void) {
@@ -61,33 +62,30 @@ bool SerialManager::processCharacter(char c) {
     case 'j':           //The TympanRemote app sends a 'J' to the Tympan when it connects
       printTympanRemoteLayout();  //in resonse, the Tympan sends the definition of the GUI that we'd like
       break;
-    case 'A':
-      incrementInputGain(-gainIncrement_dB);
-      printGainLevels("Decrease");
+    case 't':
+      updateOutputGain(1.0);     //raise
+      printOutputGain();  //print to USB Serial (ie, to the SerialMonitor)
+      updateGainDisplay();  //update the App
       break;
-    case 'a':
-      // write to the SD card that 'A' was the preferred selection
-      writeTextToSD("Comparison A vs B: winner A");
-      break;
-    case 'B':
-      incrementInputGain(gainIncrement_dB);
-      printGainLevels("Increase");
-      break;
-    case 'b':
-      // write to the SD card that 'B' was the preferred selection
-      writeTextToSD("Comparison A vs B: winner B");
-      break;
-    case 'S':
-      doSlowCompression();
+    case 'T':
+      updateOutputGain(-1.0); //lower
+      printOutputGain();  //print to USB Serial (ie, to the SerialMonitor)
+      updateGainDisplay();  //update the App
       break;
     case 'F':
-      doFastCompression();
+      doFast();
+      break;
+    case 'S':
+      doSlow();
+      break;  
+    case 'f':
+      // write to the SD card that 'F' was the preferred selection
+      writeTextToSD("Comparison Fast vs Slow: winner FAST");
       break;
     case 's':
-       // falls through on purpose
-    case 'f':
-      logCompressionPreference(c);
-      break;      
+      // write to the SD card that 'S' was the preferred selection
+      writeTextToSD("Comparison Fast vs Slow: winner SLOW");
+      break;
     default:
       ret_val = SerialManagerBase::processCharacter(c);
       break;
@@ -105,34 +103,26 @@ void SerialManager::createTympanRemoteLayout(void) {
       //Add a card under the first page
       card_gain_handle = page_handle->addCard("Change Loudness");
 
-          //Add a "-" digital gain button with the Label("-"); Command("A"); Internal ID ("minusButton"); and width (4)
-          card_gain_handle->addButton("-", "A", "minusButton", 4);  //displayed string, command, button ID, button width (out of 12)
-          //Add an indicator that's a button with no command:  Label (value of the digital gain); Command (""); Internal ID ("gain indicator"); width (4).
-          card_gain_handle->addButton("","","inpGain",4);  //displayed string (blank for now), command (blank), button ID, button width (out of 12)
-          //Add a "+" digital gain button with the Label("+"); Command("K"); Internal ID ("minusButton"); and width (4)
-          card_gain_handle->addButton("+", "B", "plusButton", 4);   //displayed string, command, button ID, button width (out of 12)
-
-          card_gain_handle->addButton("Less OK", 'a', "AisBest", 4);
-          card_gain_handle->addButton("", "", "aSpaceb", 4);
-          card_gain_handle->addButton("More OK", 'b', "BisBest", 4);
+      card_gain_handle->addButton("-", "T", "minusGain", 4);  //displayed string, command, button ID, button width (out of 12)
+      card_gain_handle->addButton("", "","outputGain", 4);  //displayed string (blank for now), command (blank), button ID, button width (out of 12)
+      card_gain_handle->addButton("+", "t", "plusGain", 4);   //displayed string, command, button ID, button width (out of 12)
 
      //Add a second card under the first page
-      card_comp_handle = page_handle->addCard("Change Settings");
+      card_comp_handle = page_handle->addCard("Prescription Selection");
 
-          //Add a '1' button for slow compression and a '2' button for fast compression
-          card_comp_handle->addButton("1", "S", "slowButton", 4);  //displayed string, command, button ID, button width (out of 12)
-          card_comp_handle->addButton("", "", "aSpaceb", 4);
-          card_comp_handle->addButton("2", "F", "fastButton", 4);   //displayed string, command, button ID, button width (out of 12)
+      card_comp_handle->addButton("A", "F", "fast", 4);  //displayed string, command, button ID, button width (out of 12)
+      card_comp_handle->addButton("", "", "space", 4);
+      card_comp_handle->addButton("B", "S", "slow", 4);   //displayed string, command, button ID, button width (out of 12)
 
-          card_comp_handle->addButton("1 Better", 's', "1isBest", 4);
-          card_comp_handle->addButton("", "", "aSpaceb", 4);
-          card_comp_handle->addButton("2 Better", 'f', "2isBest", 4);
+      card_comp_handle->addButton("A Better", 's', "fastIsBest", 4);
+      card_comp_handle->addButton("", "", "anotherSpace", 4);
+      card_comp_handle->addButton("B Better", 'f', "slowIsBest", 4);
 
       //card_handle = audioSDWriter.addCard_sdRecord(page_handle);
       audioSDWriter.addCard_sdRecord(page_handle);
 
   //add some pre-defined pages to the GUI
-  myGUI.addPredefinedPage("serialMonitor");
+  // myGUI.addPredefinedPage("serialMonitor");
 
 }
 
@@ -148,22 +138,32 @@ void SerialManager::printTympanRemoteLayout(void) {
 }
 
 void SerialManager::setFullGUIState(bool activeButtonsOnly) {
-  updateGUI_inputGain(activeButtonsOnly);
+  updateGainDisplay();
 
   SerialManagerBase::setFullGUIState(activeButtonsOnly);
 }
 
-void SerialManager::updateGUI_inputGain(bool activeButtonsOnly) {
-  setButtonText("inpGain", String(myState.input_gain_dB, 1));
+void SerialManager::updateGainDisplay(void) {
+  setButtonText("outputGain", String(myState.output_gain_dB,0));
 }
 
   //Print gain levels
 void SerialManager::printGainLevels(String change) {
-    writeTextToSD(String(millis()) + ", Input_Gain_dB: " + String(myState.input_gain_dB) + " " + change);
-    Serial.print(change + " Analog Input Gain = " + String(myState.input_gain_dB) + " dB");
-    Serial.println(myState.input_gain_dB); //print text to Serial port for debugging
-    Serial.print("Digital Gain = " + String(myState.digital_gain_dB) + " dB");
-    updateGUI_inputGain(true);
+    writeTextToSD(String(millis()) + ", Output_Gain_dB: " + String(myState.output_gain_dB) + " " + change);
+    Serial.println(myState.output_gain_dB); //print text to Serial port for debugging
 }
 
+void SerialManager::doFast() {
+  setupMyCompressors(0.0, myState.FAST_ATTACK, myState.FAST_RELEASE);
+  myState.activeAlgorithm = myState.FAST;
+  setButtonState("fast", true, true);
+  setButtonState("slow", false, true);
+}
+
+void SerialManager::doSlow() {
+  setupMyCompressors(25.5, myState.SLOW_ATTACK, myState.SLOW_RELEASE);
+  myState.activeAlgorithm = myState.SLOW;
+  setButtonState("slow", true, true);
+  setButtonState("fast", false, false);
+}
 #endif
